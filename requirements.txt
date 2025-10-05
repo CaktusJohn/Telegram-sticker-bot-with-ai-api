@@ -1,0 +1,6 @@
+aiogram==3.*
+aiosqlite
+aiohttp
+python-dotenv
+loguru
+pillow
