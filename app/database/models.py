@@ -26,3 +26,12 @@ async def add_user(tg_id: int, username: str = None):
             await db.commit()
             return True  # новый пользователь
         return False  # уже есть
+
+async def add_face_detection(user_id: int, file_path: str, faces_count: int, faces_data: str, created_at: datetime):
+    query = """
+    INSERT INTO face_detections (user_id, file_path, faces_count, faces_data, created_at)
+    VALUES (?, ?, ?, ?, ?)
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(query, (user_id, file_path, faces_count, faces_data, created_at))
+        await db.commit()

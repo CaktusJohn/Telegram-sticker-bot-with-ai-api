@@ -5,13 +5,16 @@ from aiogram.filters import Command
 from app.database.models import init_db, add_user
 from config import BOT_TOKEN
 from app.utils.logger import logger
-from app.handlers import start  
+from app.handlers import start, generation, menu  
+from aiogram.fsm.storage.memory import MemoryStorage
+
 
 
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+dp = Dispatcher(storage=MemoryStorage())
 dp.include_router(start.router)
-
+dp.include_router(menu.router)
+dp.include_router(generation.router)
 
 async def main():
     logger.info("🚀 Бот запускается...")
