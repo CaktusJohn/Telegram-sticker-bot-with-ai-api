@@ -5,3 +5,4 @@ __pycache__/
 database.db
 temp_files/
 *.docx
+tmp/
