@@ -6,17 +6,22 @@ from aiogram.types import Document, Message
 from aiogram.fsm.context import FSMContext
 from app.services.facemint_service import FacemintService
 from app.utils.file_handler import download_user_photo, validate_image
-from app.database.db import add_face_detection
+from app.database.models import add_face_detection
 from app.states.user_states import UserStates
 from datetime import datetime
+from app.utils.logger import logger
+from aiogram.filters import StateFilter
 
 facemint_service = FacemintService()
 router = Router()
 
+
+
 # --- Обработчик загрузки фото ---
-@router.message(F.content_type == "document", state=UserStates.waiting_photo)
+@router.message(F.document, StateFilter(UserStates.waiting_photo))
 async def handle_photo_upload(message: Message, state: FSMContext):
     # 1️⃣ Скачать фото пользователя
+    
     file_path = await download_user_photo(message.document, message.from_user.id)
 
     # 2️⃣ Валидация изображения
