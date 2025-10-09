@@ -32,8 +32,10 @@ async def handle_photo_upload(message: Message, state: FSMContext):
 
     await message.answer("🔎 Проверяем наличие лиц на фото...")
 
-    # 3️⃣ Создаём временный URL (для теста можно локальный путь)
-    image_url = f"file://{os.path.abspath(file_path)}"
+    # 3️⃣ Формируем публичный URL через Nginx
+    filename = os.path.basename(file_path)
+    image_url = f"http://195.133.25.216/media/{filename}"
+    logger.info(f"Сформирован публичный URL для фото: {image_url}")
 
     # 4️⃣ Вызов Facemint API для детекции лиц
     result = await facemint_service.faces_from_url(image_url)
