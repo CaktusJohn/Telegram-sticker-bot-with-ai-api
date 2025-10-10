@@ -6,4 +6,5 @@ database.db
 temp_files/
 *.docx
 tmp/
+logs/
 GEMINI.md

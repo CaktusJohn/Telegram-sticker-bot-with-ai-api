@@ -1,29 +1,15 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery
 from aiogram.types import ReplyKeyboardRemove
-router = Router()
+from app.keyboards.main import menu
 
-# --- Меню с inline-кнопками ---
-menu = InlineKeyboardMarkup(inline_keyboard=[
-    [
-        InlineKeyboardButton(text="✨ Создать стикерпак", callback_data="create_stickers"),
-        InlineKeyboardButton(text="🤝 Реферальная программа", callback_data="ref_program")
-    ],
-    [
-        InlineKeyboardButton(text="💎 Попробовать бесплатно", callback_data="try_free"),
-        InlineKeyboardButton(text="🛠️ Техподдержка", callback_data="support")
-    ]
-])
+router = Router()
 
 # --- Команда /start ---
 @router.message(F.text == "/start")
 async def start_handler(message: Message):
     await message.answer(
-        "Привет 👋\n Это стикер бот",
-        reply_markup=ReplyKeyboardRemove() 
-    )
-    await message.answer(
-        "Вот твоё меню:",
-        reply_markup=menu  # ← показываем inline-кнопки
+        "Привет 👋\nЭто face-swap бот, который переносит твое лицо на любой стикер.\n\nДля старта нажми 'Попробовать бесплатно' или выбери другую опцию.",
+        reply_markup=menu
     )
 

@@ -24,3 +24,6 @@ except ValueError:
 
 # Debug
 DEBUG = os.getenv("DEBUG", "False").lower() in ("1", "true", "yes")
+
+# Public host for media files
+PUBLIC_HOST = os.getenv("PUBLIC_HOST", "localhost")

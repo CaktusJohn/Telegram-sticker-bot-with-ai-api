@@ -1,27 +1,132 @@
-import asyncio
 from aiogram import Router, F
-import os
-import json
-from aiogram.types import Document, Message
+from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
-from app.services.facemint_service import FacemintService
-from app.utils.file_handler import download_user_photo, validate_image
-from app.database.models import add_face_detection
-from app.states.user_states import UserStates
-from datetime import datetime
-from app.utils.logger import logger
 from aiogram.filters import StateFilter
+from app.keyboards.main import get_categories_keyboard, get_template_navigation_keyboard
+from app.states.user_states import UserStates
+from app.utils.logger import logger
 
-facemint_service = FacemintService()
 router = Router()
 
+# ... (комментарии-планы)
+
+# --- Обработчик для пагинации категорий ---
+@router.callback_query(F.data.startswith("cat_page_"), StateFilter(UserStates.selecting_category))
+async def handle_category_pagination(callback: CallbackQuery):
+    page = int(callback.data.split("_")[-1])
+    await callback.message.edit_reply_markup(
+        reply_markup=get_categories_keyboard(page=page)
+    )
+    await callback.answer()
 
 
-# --- Обработчик загрузки фото ---
+# Словарь соотнесения категорий и стикерпаков
+STICKER_PACKS = {
+    "🎬 Фильмы и сериалы": "NBstickeriaBrat",
+    "🎭 Мемы и приколы": "MemeS1ick3r",
+    "💼 Работа и офис": "PutInPacky",
+}
+
+# --- Обработчик выбора категории ---
+@router.callback_query(F.data.startswith("cat_select_"), StateFilter(UserStates.selecting_category))
+async def handle_category_selection(callback: CallbackQuery, state: FSMContext):
+    print(f"DEBUG: handle_category_selection triggered! Current state: {await state.get_state()}") # Debug print
+    category_name = callback.data.replace("cat_select_", "")
+    pack_name = STICKER_PACKS.get(category_name)
+
+    if not pack_name:
+        await callback.answer("Для этой категории шаблоны еще не добавлены.", show_alert=True)
+        return
+
+    await callback.message.edit_text(f"⏳ Загружаю шаблоны для категории '{category_name}'...")
+
+    try:
+        sticker_set = await callback.bot.get_sticker_set(pack_name)
+        stickers = sticker_set.stickers
+        
+        if not stickers:
+            await callback.message.edit_text("В этой категории пока нет шаблонов.")
+            return
+
+        await state.update_data(
+            templates=[s.file_id for s in stickers],
+            template_page=0,
+            current_category=category_name
+        )
+        await state.set_state(UserStates.selecting_template)
+
+        await callback.message.delete()
+        await callback.message.answer_sticker(
+            sticker=stickers[0].file_id,
+            reply_markup=get_template_navigation_keyboard(
+                page=0,
+                total_pages=len(stickers),
+                category_id=category_name
+            )
+        )
+
+    except Exception as e:
+        logger.error(f"Не удалось получить стикерпак {pack_name}: {e}")
+        await callback.message.edit_text("Не удалось загрузить шаблоны. Попробуйте другую категорию.")
+    
+    await callback.answer()
+
+
+# --- Обработчики для навигации по шаблонам ---
+
+@router.callback_query(F.data == "back_to_categories", StateFilter(UserStates.selecting_template))
+async def back_to_categories(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(UserStates.selecting_category)
+    await callback.message.delete()
+    await callback.message.answer(
+        "Выберите категорию шаблонов:",
+        reply_markup=get_categories_keyboard(page=0)
+    )
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("tpl_page_"), StateFilter(UserStates.selecting_template))
+async def handle_template_selection(callback: CallbackQuery, state: FSMContext):
+    print(f"DEBUG: handle_template_selection callback received! Current state: {await state.get_state()}") # Debug print
+    print(f"DEBUG: handle_template_pagination triggered! Current state: {await state.get_state()}") # Debug print
+    page = int(callback.data.split("_")[-1])
+    
+    data = await state.get_data()
+    templates = data.get("templates", [])
+    current_category = data.get("current_category", "")
+    
+    if not templates:
+        await callback.answer("Произошла ошибка, шаблоны не найдены.", show_alert=True)
+        return
+
+    new_sticker_id = templates[page]
+    
+    new_keyboard = get_template_navigation_keyboard(
+        page=page,
+        total_pages=len(templates),
+        category_id=current_category
+    )
+    
+    # Удаляем старое сообщение со стикером
+    await callback.message.delete()
+
+    # Присылаем новое с обновленным стикером и клавиатурой
+    await callback.message.answer_sticker(
+        sticker=new_sticker_id,
+        reply_markup=new_keyboard
+    )
+
+    await state.update_data(template_page=page) # Update the page in state
+    await callback.answer()
+
+
+# --- Обработчик загрузки фото (после выбора шаблона) ---
 @router.message(F.document, StateFilter(UserStates.waiting_photo))
 async def handle_photo_upload(message: Message, state: FSMContext):
+    import os
+    import json
     # 1️⃣ Скачать фото пользователя
-    
+    from app.utils.file_handler import download_user_photo, validate_image
     file_path = await download_user_photo(message.document, message.from_user.id)
 
     # 2️⃣ Валидация изображения
@@ -32,47 +137,55 @@ async def handle_photo_upload(message: Message, state: FSMContext):
 
     await message.answer("🔎 Проверяем наличие лиц на фото...")
 
-    # 3️⃣ Формируем публичный URL через Nginx
+    # 3️⃣ Формируем публичный URL
+    from config import PUBLIC_HOST
+    user_id = message.from_user.id
     filename = os.path.basename(file_path)
-    image_url = f"http://195.133.25.216/media/{filename}"
+    image_url = f"http://{PUBLIC_HOST}/media/{user_id}/{filename}"
     logger.info(f"Сформирован публичный URL для фото: {image_url}")
 
     # 4️⃣ Вызов Facemint API для детекции лиц
+    from app.services.facemint_service import FacemintService
+    facemint_service = FacemintService()
     result = await facemint_service.faces_from_url(image_url)
 
-    if result['code'] != 0:
+    if result.get('code') != 0:
         await message.answer("⚠️ Ошибка сервиса. Попробуйте позже.")
         return
 
-    faces_count = result['data']['count']
-    faces_data = result['data']['faces']
+    faces_count = result.get('data', {}).get('count', 0)
 
     if faces_count == 0:
         await message.answer("❌ Лица не найдены. Пожалуйста, загрузите фото с четко видимым лицом.")
         return
 
-    # 5️⃣ Сохраняем результат в базу
+    # 5️⃣ Сохраняем результат в базу и метаданные
+    from app.database.models import add_face_detection
+    from datetime import datetime
     await add_face_detection(
         user_id=message.from_user.id,
         file_path=file_path,
         faces_count=faces_count,
-        faces_data=json.dumps(faces_data),
+        faces_data=json.dumps(result.get('data', {}).get('faces', [])),
         created_at=datetime.utcnow()
     )
 
-    # 6️⃣ Сохраняем метаданные в JSON
     meta_path = os.path.join(os.path.dirname(file_path), "meta.json")
     meta = {
         "original_path": file_path,
         "faces_detected": True,
         "faces_count": faces_count,
-        "faces_data": faces_data,
+        "faces_data": result.get('data', {}).get('faces', []),
         "created_at": datetime.utcnow().isoformat()
     }
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
 
-    # 7️⃣ Обновляем FSM состояние
-    await state.set_state(UserStates.photo_validated)
-    await message.answer("✅ Фото принято! Теперь выберите категорию шаблона.")
-
+    # 6️⃣ Сохраняем путь к фото в FSM для дальнейшей генерации
+    await state.update_data(user_photo_path=file_path)
+    
+    # 7️⃣ Теперь, когда фото загружено и валидировано, запускаем генерацию
+    # (Этот шаг будет реализован в следующем обработчике)
+    await message.answer("✅ Фото принято! Начинаю генерацию...")
+    # TODO: Вызвать функцию генерации здесь
+    await state.clear() # Сбросить состояние после обработки
