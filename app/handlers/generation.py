@@ -120,6 +120,35 @@ async def handle_template_selection(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+# --- Обработчик ВЫБОРА шаблона ---
+@router.callback_query(F.data.startswith("tpl_select_"), StateFilter(UserStates.selecting_template))
+async def handle_template_confirm(callback: CallbackQuery, state: FSMContext):
+    """
+    Обрабатывает нажатие кнопки "✅ Выбрать этот шаблон".
+    """
+    data = await state.get_data()
+    templates = data.get("templates", [])
+    page = data.get("template_page", 0)
+    
+    if not templates:
+        await callback.answer("Произошла ошибка, шаблоны не найдены.", show_alert=True)
+        return
+
+    selected_template_id = templates[page]
+    
+    # Сохраняем выбранный шаблон в FSM
+    await state.update_data(selected_template_id=selected_template_id)
+    
+    # Переводим пользователя в состояние ожидания фото
+    await state.set_state(UserStates.waiting_photo)
+    
+    await callback.message.delete()
+    await callback.message.answer(
+        "Отлично! Теперь, пожалуйста, пришлите ваше фото файлом (не сжатое изображение)."
+    )
+    await callback.answer()
+
+
 # --- Обработчик загрузки фото (после выбора шаблона) ---
 @router.message(F.document, StateFilter(UserStates.waiting_photo))
 async def handle_photo_upload(message: Message, state: FSMContext):
