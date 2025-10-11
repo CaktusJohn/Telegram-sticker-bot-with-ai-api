@@ -42,13 +42,32 @@ async def handle_category_selection(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(f"⏳ Загружаю шаблоны для категории '{category_name}'...")
 
     try:
-        sticker_set = await callback.bot.get_sticker_set(pack_name)
-        stickers = sticker_set.stickers
+        # Final solution: Create a dedicated aiohttp session to make a raw request,
+        # completely bypassing any aiogram models or session internals.
+        import aiohttp
+        from aiogram.types import Sticker
+
+        api_url = f"https://api.telegram.org/bot{callback.bot.token}/getStickerSet"
+        payload = {"name": pack_name}
         
-        if not stickers:
+        async with aiohttp.ClientSession() as http_session:
+            async with http_session.post(api_url, json=payload) as response:
+                response.raise_for_status() # Raise an exception for bad status codes (4xx or 5xx)
+                sticker_set_dict = await response.json()
+
+        if not sticker_set_dict.get('ok'):
+            raise Exception(f"Telegram API error: {sticker_set_dict.get('description')}")
+
+        # Manually parse the dictionary to get the list of sticker data
+        stickers_data = sticker_set_dict.get('result', {}).get('stickers', [])
+
+        if not stickers_data:
             await callback.message.edit_text("В этой категории пока нет шаблонов.")
             return
 
+        # Convert the raw sticker dicts into aiogram Sticker objects
+        stickers = [Sticker(**sticker_data) for sticker_data in stickers_data]
+        
         await state.update_data(
             templates=[s.file_id for s in stickers],
             template_page=0,
@@ -167,10 +186,10 @@ async def handle_photo_upload(message: Message, state: FSMContext):
     await message.answer("🔎 Проверяем наличие лиц на фото...")
 
     # 3️⃣ Формируем публичный URL
-    from config import PUBLIC_HOST
+    from config import MEDIA_HOST
     user_id = message.from_user.id
     filename = os.path.basename(file_path)
-    image_url = f"http://{PUBLIC_HOST}/media/{user_id}/{filename}"
+    image_url = f"{MEDIA_HOST}/media/{user_id}/{filename}"
     logger.info(f"Сформирован публичный URL для фото: {image_url}")
 
     # 4️⃣ Вызов Facemint API для детекции лиц

@@ -27,3 +27,7 @@ DEBUG = os.getenv("DEBUG", "False").lower() in ("1", "true", "yes")
 
 # Public host for media files
 PUBLIC_HOST = os.getenv("PUBLIC_HOST", "localhost")
+
+# Media server (Flask)
+MEDIA_HOST = os.getenv("MEDIA_HOST", "http://localhost:5001")
+
