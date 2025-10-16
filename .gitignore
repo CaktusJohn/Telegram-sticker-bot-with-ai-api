@@ -8,3 +8,5 @@ temp_files/
 tmp/
 logs/
 GEMINI.md
+gemini_history_url.txt
+venv_bot_new_python/

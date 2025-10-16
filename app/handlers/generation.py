@@ -173,11 +173,11 @@ async def handle_template_confirm(callback: CallbackQuery, state: FSMContext):
 async def handle_photo_upload(message: Message, state: FSMContext):
     import os
     import json
-    # 1️⃣ Скачать фото пользователя
+    #  Скачать фото пользователя
     from app.utils.file_handler import download_user_photo, validate_image
     file_path = await download_user_photo(message.document, message.from_user.id)
 
-    # 2️⃣ Валидация изображения
+    # Валидация изображения
     valid, error = await validate_image(file_path)
     if not valid:
         await message.answer(f"❌ Ошибка: {error}\nПопробуйте загрузить другое фото.")
@@ -185,36 +185,37 @@ async def handle_photo_upload(message: Message, state: FSMContext):
 
     await message.answer("🔎 Проверяем наличие лиц на фото...")
 
-    # 3️⃣ Формируем публичный URL
+    #  Формируем публичный URL
     from config import MEDIA_HOST
     user_id = message.from_user.id
     filename = os.path.basename(file_path)
     image_url = f"{MEDIA_HOST}/media/{user_id}/{filename}"
     logger.info(f"Сформирован публичный URL для фото: {image_url}")
 
-    # 4️⃣ Вызов Facemint API для детекции лиц
-    from app.services.facemint_service import FacemintService
+    #  Вызов Facemint API для детекции лиц
+    from app.services.facemint_service import FacemintService, FacemintError
     facemint_service = FacemintService()
-    result = await facemint_service.faces_from_url(image_url)
-
-    if result.get('code') != 0:
+    try:
+        result = await facemint_service.faces_from_url(image_url)
+    except FacemintError as e:
+        logger.error(f"Ошибка детекции лиц от Facemint: {e}")
         await message.answer("⚠️ Ошибка сервиса. Попробуйте позже.")
         return
 
-    faces_count = result.get('data', {}).get('count', 0)
+    faces_count = result.get('count', 0)
 
     if faces_count == 0:
         await message.answer("❌ Лица не найдены. Пожалуйста, загрузите фото с четко видимым лицом.")
         return
 
-    # 5️⃣ Сохраняем результат в базу и метаданные
+    #  Сохраняем результат в базу и метаданные
     from app.database.models import add_face_detection
     from datetime import datetime
     await add_face_detection(
         user_id=message.from_user.id,
         file_path=file_path,
         faces_count=faces_count,
-        faces_data=json.dumps(result.get('data', {}).get('faces', [])),
+        faces_data=json.dumps(result.get('faces', [])),
         created_at=datetime.utcnow()
     )
 
@@ -223,16 +224,16 @@ async def handle_photo_upload(message: Message, state: FSMContext):
         "original_path": file_path,
         "faces_detected": True,
         "faces_count": faces_count,
-        "faces_data": result.get('data', {}).get('faces', []),
+        "faces_data": result.get('faces', []),
         "created_at": datetime.utcnow().isoformat()
     }
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
 
-    # 6️⃣ Сохраняем путь к фото в FSM для дальнейшей генерации
+    #  Сохраняем путь к фото в FSM для дальнейшей генерации
     await state.update_data(user_photo_path=file_path)
     
-    # 7️⃣ Теперь, когда фото загружено и валидировано, запускаем генерацию
+    #  Теперь, когда фото загружено и валидировано, запускаем генерацию
     # (Этот шаг будет реализован в следующем обработчике)
     await message.answer("✅ Фото принято! Начинаю генерацию...")
     # TODO: Вызвать функцию генерации здесь
