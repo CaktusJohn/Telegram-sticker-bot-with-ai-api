@@ -1,5 +1,7 @@
 Faceswap sticker bot
-Структура файлов
+## Структура проекта
+
+```
 faceswap_bot/
 ├── main.py                    # Точка входа приложения
 ├── config.py                  # Конфигурация и переменные окружения
@@ -26,5 +28,5 @@ faceswap_bot/
     │   ├── facemint_service.py # Интеграция с Facemint API
     │   └── referral_service.py # Реферальная логика
     └── utils/                 # Вспомогательные функции
-        ├── logger.py          # Настройка логирования
-        └── file_handler.py    # Работа с файлами
+        └── logger.py          # Настройка логирования
+```
